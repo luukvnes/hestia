@@ -1,7 +1,8 @@
 import hestia
 import logging
 import requests
-import secrets
+import secrets_1
+import login_bouwinvest
 from datetime import datetime, timedelta
 from asyncio import run
 from telegram.error import Forbidden
@@ -24,7 +25,7 @@ async def main() -> None:
             message += "\n\nDonation link expiring soon, use /setdonate."
             
         if message:
-            await hestia.BOT.send_message(text=message[2:], chat_id=secrets.OWN_CHAT_ID)
+            await hestia.BOT.send_message(text=message[2:], chat_id=secrets_1.OWN_CHAT_ID)
     
     if not hestia.check_scraper_halted():
         for target in hestia.query_db("SELECT * FROM hestia.targets WHERE enabled = true"):
@@ -34,7 +35,7 @@ async def main() -> None:
                 error = f"[{target['agency']} ({target['id']})] {repr(e)}"
                 logging.error(error)
                 if "Connection reset by peer" not in error:
-                    await hestia.BOT.send_message(text=error, chat_id=secrets.OWN_CHAT_ID)
+                    await hestia.BOT.send_message(text=error, chat_id=secrets_1.OWN_CHAT_ID)
     else:
         logging.warning("Scraper is halted.")
 
@@ -43,25 +44,36 @@ async def broadcast(homes: list[hestia.Home]) -> None:
     subs = set()
     
     if hestia.check_dev_mode():
-        subs = hestia.query_db("SELECT * FROM subscribers WHERE subscription_expiry IS NOT NULL AND telegram_enabled = true AND user_level > 1")
+        subs = hestia.query_db("SELECT * FROM hestia.subscribers WHERE subscription_expiry IS NOT NULL AND telegram_enabled = true AND user_level > 1")
     else:
-        subs = hestia.query_db("SELECT * FROM subscribers WHERE subscription_expiry IS NOT NULL AND telegram_enabled = true")
+        subs = hestia.query_db("SELECT * FROM hestia.subscribers WHERE subscription_expiry IS NOT NULL AND telegram_enabled = true")
         
-    # Create dict of agencies and their pretty names
-    agencies = hestia.query_db("SELECT agency, user_info FROM targets")
-    agencies = dict([(a["agency"], a["user_info"]["agency"]) for a in agencies])
     
-    for home in homes:
-        for sub in subs:
+    for sub in subs:
+        filtered_homes = []
+        for home in homes:
             # Apply filters
             if (home.price >= sub["filter_min_price"] and home.price <= sub["filter_max_price"]) and \
                (home.city.lower() in sub["filter_cities"]) and \
                (home.agency in sub["filter_agencies"]):
+                filtered_homes.append(home)
+        for home in filtered_homes:
+                if home.agency == "bouwinvest":
+                    # If the home is from Bouwinvest, we need to log in first
+                    # Create a session
+                    session = requests.Session()
+                    session.max_redirects = 5
+                    login_bouwinvest.sign_in(session, sub['username'], sub['password'])
+                    login_bouwinvest.add_house(session, home.url.split("/")[-2])
+                    login_bouwinvest.save_preferences(session)
+                    message = f"{hestia.HOUSE_EMOJI} SIGNED UP FOR THIS HOME\n" 
+
+
             
-                message = f"{hestia.HOUSE_EMOJI} {home.address}, {home.city}\n"
+                message += f"{hestia.HOUSE_EMOJI} {home.address}, {home.city}\n"
                 message += f"{hestia.EURO_EMOJI} €{home.price}/m\n\n"
                 message = hestia.escape_markdownv2(message)
-                message += f"{hestia.LINK_EMOJI} [{agencies[home.agency]}]({home.url})"
+                message += f"{hestia.LINK_EMOJI} [{home.agency}]({home.url})"
                 
                 try:
                     await hestia.BOT.send_message(text=message, chat_id=sub["telegram_id"], parse_mode="MarkdownV2")

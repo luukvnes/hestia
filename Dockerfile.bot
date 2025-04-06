@@ -9,7 +9,7 @@ COPY requirements.txt requirements.txt
 RUN apt-get update && apt-get install gcc -y
 RUN pip3 install -r requirements.txt
 
-COPY secrets.py secrets.py
+COPY secrets_1.py secrets_1.py
 COPY hestia.py hestia.py
 COPY bot.py bot.py
 

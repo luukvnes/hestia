@@ -10,7 +10,7 @@ from urllib import parse
 from datetime import datetime
 from psycopg2.extras import RealDictCursor
 from bs4 import BeautifulSoup
-from secrets import TOKEN, DB
+from secrets_1 import TOKEN, DB
 
 
 class Home:
@@ -568,16 +568,17 @@ def query_db(query: str, params: list[str] = [], fetchOne: bool = False) -> list
                             password=DB["password"],
                             port=DB["port"])
     
-    cursor = db.cursor(cursor_factory=RealDictCursor)
-    cursor.execute(query, params)
     
-    # Try, because not all queries will return data
+     # Try, because not all queries will return data
     try:
+        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(query, params)
         if fetchOne:
             result = cursor.fetchone()
         else:
             result = cursor.fetchall()
-    except:
+    except Exception as e:
+        logging.error(f"Query failed: {query} ({e})")
         result = None
     
     db.commit()
